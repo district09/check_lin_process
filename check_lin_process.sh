@@ -1,16 +1,15 @@
-#!/bin/bash                                                                                                              
-                                                                                                                         
-# Script name:          check_lin_process.sh                                                                                 
-# Version:              v1.02.151222                                                                                   
-# Created on:           17/08/2015                                                                                       
-# Author:               Willem D'Haese                                                                                   
-# Purpose:              Bash script that counts processes and returns total 
-#			memory and cpu perfdata.
+# Script name:          check_lin_process.sh
+# Version:              v2.01.160105
+# Created on:           17/08/2015
+# Author:               Willem D'Haese
+# Purpose:              Bash script that counts processes and returns total
+#                       memory and cpu perfdata.
 # On GitHub:            https://github.com/willemdh/check_lin_process
-# On OutsideIT:         http://outsideit.net/check-lin-process                                          
-# Recent History:                                                                                                        
+# On OutsideIT:         http://outsideit.net/check-lin-process
+# Recent History:
 #   17/08/15 => Creation date
 #   22/12/15 => Subtract 2 from process count and critical if 0
+#   05/01/16 => Added Minimum and Maximum process count, replaced getopt
 # Copyright:
 # This program is free software: you can redistribute it and/or modify it
 # under the terms of the GNU General Public License as published by the Free
@@ -22,126 +21,134 @@
 # GNU General Public License along with this program.  If not, see
 # <http://www.gnu.org/licenses/>.
 
-displayhelp="false"
-runcheck=""
-checkresult=""
-hostname=""
-process=""
-fancyname=""
-check=""
-warning=""
-critical=""
+Verbose=0
 
-optstr=hH:p:N:C:w:c: 
+writelog () {
+  if [ -z "$1" ] ; then echo "WriteLog: Log parameter #1 is zero length. Please debug..." ; exit 1
+  else
+    if [ -z "$2" ] ; then echo "WriteLog: Severity parameter #2 is zero length. Please debug..." ; exit 1
+    else
+      if [ -z "$3" ] ; then echo "WriteLog: Message parameter #3 is zero length. Please debug..." ; exit 1 ; fi
+    fi
+  fi
+  Now=$(date '+%Y-%m-%d %H:%M:%S,%3N')
+  if [ $1 = "Verbose" -a $Verbose = 1 ] ; then echo "$Now: $2: $3"
+  elif [ $1 = "Verbose" -a $Verbose = 0 ] ; then :
+  elif [ $1 = "Output" ] ; then echo "${Now}: $2: $3"
+  elif [ -f $1 ] ; then echo "${Now}: $2: $3" >> $1
+  fi
+}
 
-while getopts $optstr Switchvar
-do
-	case $Switchvar in
-		c) critical=$OPTARG ;;
-		w) warning=$OPTARG ;;
-		C) check=$OPTARG ;;
-		N) fancyname=$OPTARG ;;
-		p) process=$OPTARG ;;
-		H) hostname=$OPTARG ;;
-		h) displayhelp="true" ;;
-	esac
+Process=""
+Name=""
+Warning=""
+Critical=""
+Minimum=0
+Maximum=100
+ProcessCount=0
+
+while :; do
+    case "$1" in
+        -h|--help)
+            DisplayHelp="true"
+            shift
+            ;;
+        -p|--Process)
+            shift
+            Process="$1"
+            shift
+            ;;
+        -N|--Name)
+            shift
+            Name="$1"
+            shift
+            ;;
+        -w|--Warning)
+            shift
+            Warning="$1"
+            shift
+            ;;
+        -c|--Critical)
+            shift
+            Critical="$1"
+            shift
+            ;;
+        -m|--Minimum)
+            shift
+            Minimum="$1"
+            shift
+            ;;
+        -M|--Maximum)
+            shift
+            Maximum="$1"
+            shift
+            ;;
+        -*)
+            echo "you specified a non-existant option. Please debug."
+            exit 2
+            ;;
+        *)
+            break
+            ;;
+    esac
 done
-shift $(( $OPTIND - 1 ))
 
-if [ "$displayhelp" == "true" ]
-then
-	echo "
-		-C,		Specify a check type: CPU or Memory, default check type is Memory
-		-c,		Specify a critical level for the check, default is 70%
-		-H,		Specify hostname
-		-h,		Display help information
-		-N,		Specify a fancy name for the process
-		-p,		Specify a process to be monitored
-		-w,		Specify a warning level for the check, default is 60%
-		"
-	exit
-fi	
-
-if [ "$process" == "" ]
-then
-	echo "No process was specified. The '-p' switch must be used to specify the process"
-	exit 3
+if [[ "$DisplayHelp" == "true" ]] ; then
+    echo "
+        -h|--help,      Display help information
+        -N|--Name,      Specify a fancy name for the process
+        -p|--Process,   Specify a process to be monitored
+        -w|--Warning,   Specify a warning level for the check, default is 60%
+        -c|--Critical,  Specify a critical level for the check, default is 70%
+        -m|--Minimum,   Minimum number of processes expected to run, default 0
+        -M|--Maximum,   Maximum amount of processes expected to run, default 100"
+    exit 0
 fi
 
-if [ "$fancyname" == "" ]
-then
-	fancyname=$process
+if [ "$Process" == "" ] ; then
+    echo "No process was specified. The '-p' switch must be used to specify the process"
+    exit 3
 fi
 
-if [ "$check" != "" ]
-then
-	if [ "$check" == "cpu" ] || [ "$check" == "Cpu" ] || [ "$check" == "CPU" ]
-	then
-		check="cpu"
-	elif [ "$check" == "memory" ] || [ "$check" == "Memory" ] || [ "$check" == "MEMORY" ]
-	then
-		check="mem"
-	fi
-else
-	check="all"
-	checktoken="1"
+if [ "$Name" == "" ] ; then
+    Name=$Process
 fi
 
-proccount=0
+CheckCpu=`ps -C $Process -o%cpu= | paste -sd+ | bc`
+RoundedCpuResult=`echo $CheckCpu | awk '{print int($1+0.5)}'`
+CheckMem=`ps -C $Process -o%mem= | paste -sd+ | bc`
+RoundedMemResult=`echo $CheckMem | awk '{print int($1+0.5)}'`
+ProcessCount=`ps -ef | grep -v grep | grep $Process | wc -l`
+RealProcessCount=$(($ProcessCount-2))
 
-if [ "$check" == "cpu" ]
-then
-	runcheckcpu=`ps -C $process -o%cpu= | paste -sd+ | bc`
-	roundedcpuresult=`echo $runcheckcpu | awk '{print int($1+0.5)}'`
-elif [ "$check" == "mem" ]
-then
-	runcheckmem=`ps -C $process -o%mem= | paste -sd+ | bc`
-	roundedmemresult=`echo $runcheckmem | awk '{print int($1+0.5)}'`
-elif [ "$check" == "all" ]
-then
-	runcheckcpu=`ps -C $process -o%cpu= | paste -sd+ | bc`
-	roundedcpuresult=`echo $runcheckcpu | awk '{print int($1+0.5)}'`
-	runcheckmem=`ps -C $process -o%mem= | paste -sd+ | bc`
-	roundedmemresult=`echo $runcheckmem | awk '{print int($1+0.5)}'`
-	proccount=`ps -ef | grep -v grep | grep $process | wc -l`
-#	echo "ProcCount: $proccount"
-	RealProcessCount=$(($proccount-2)) 
-#	echo "RealProcCount: $RealProcessCount"
-else
-	echo "There is an error with your check's syntax. Please debug.."
-	exit 3
+if [ "$Warning" == "" ] ; then
+    Warning=60
+fi
+if [ "$Critical" == "" ] ; then
+    Critical=70
 fi
 
-#echo "roundedcpuresult = $roundedcpuresult"
-#echo "roundedmemresult = $roundedmemresult"
-
-if [ "$warning" == "" ]
-then
-	warning=60
-fi
-if [ "$critical" == "" ]
-then
-	critical=70
-fi
-
-if [ "$roundedcpuresult" == "" -o  "$roundedmemresult" == "" ] ; then
-        echo "The $fancyname process doesn't appear to be running, as CPU or memory is undefined. Please debug."
+if [ "$RoundedCpuResult" == "" -o "$RoundedMemResult" == "" ] ; then
+        echo "The $Name process doesn't appear to be running, as CPU or memory is undefined. Please debug."
         exit 1
-elif (( RealProcessCount < 1 )) ; then
-	echo "CRITICAL: $fancyname not running. {CPU: ${roundedcpuresult}%}{Memory: ${roundedmemresult}%}{Count: ${RealProcessCount}}} | ${fancyname}_cpu=$roundedcpuresult ${fancyname}_mem=$roundedmemresult ${fancyname}_count=$RealProcessCount"
-	exit 2
-fi
-
-if [ "$roundedcpuresult" -ge "$critical"  -o  "$roundedmemresult" -ge "$critical" ] ; then
-        echo "CRITICAL: $fancyname exceeded critical threshold. {CPU: ${roundedcpuresult}%}{Memory: ${roundedmemresult}%}{Count: ${RealProcessCount}}} | ${fancyname}_cpu=$roundedcpuresult ${fancyname}_mem=$roundedmemresult ${fancyname}_count=$RealProcessCount"
+elif [[ $RealProcessCount -lt $Minimum ]] ; then
+    echo "CRITICAL: $Name process count lesser then Minimum threshold. {CPU: ${RoundedCpuResult}%}{Memory: ${RoundedMemResult}%}{Count: ${RealProcessCount}}} | ${Name}_cpu=$RoundedCpuResult ${Name}_mem=$RoundedMemResult ${Name}_count=$RealProcessCount"
+    exit 2
+elif [[ $RealProcessCount -gt $Maximum ]] ; then
+        echo "CRITICAL: $Name process count greater then Maximum threshold. {CPU: ${RoundedCpuResult}%}{Memory: ${RoundedMemResult}%}{Count: ${RealProcessCount}}} | ${Name}_cpu=$RoundedCpuResult ${Name}_mem=$RoundedMemResult ${Name}_count=$RealProcessCount"
         exit 2
-elif [ "$roundedcpuresult" -ge "$warning" -a "$roundedcpuresult" -ge "$warning" ] ; then
-        echo "WARNING: $fancyname exceeded warning threshold. {CPU: ${roundedcpuresult}%}{Memory: ${roundedmemresult}%}{Count: ${RealProcessCount}}} | ${fancyname}_cpu=$roundedcpuresult ${fancyname}_mem=$roundedmemresult ${fancyname}_count=$RealProcessCount"
+fi
+
+if [ "$RoundedCpuResult" -ge "$Critical" -o  "$RoundedMemResult" -ge "$Critical" ] ; then
+        echo "CRITICAL: $Name exceeded critical threshold. {CPU: ${RoundedCpuResult}%}{Memory: ${RoundedMemResult}%}{Count: ${RealProcessCount}}} | ${Name}_cpu=$RoundedCpuResult ${Name}_mem=$RoundedMemResult ${Name}_count=$RealProcessCount"
+        exit 2
+elif [ "$RoundedCpuResult" -ge "$Warning" -o "$RoundedMemResult" -ge "$Warning" ] ; then
+        echo "WARNING: $Name exceeded warning threshold. {CPU: ${RoundedCpuResult}%}{Memory: ${RoundedMemResult}%}{Count: ${RealProcessCount}}} | ${Name}_cpu=$RoundedCpuResult ${Name}_mem=$RoundedMemResult ${Name}_count=$RealProcessCount"
         exit 1
-elif [ "$roundedcpuresult" -lt "$warning" -o  "$roundedmemresult" -lt "$warning" ] ; then
-        echo "OK: $fancyname {CPU: ${roundedcpuresult}%}{Memory: ${roundedmemresult}%}{Count: ${RealProcessCount}}} | ${fancyname}_cpu=$roundedcpuresult ${fancyname}_mem=$roundedmemresult ${fancyname}_count=$RealProcessCount"
+elif [ "$RoundedCpuResult" -lt "$Warning" -o "$RoundedMemResult" -lt "$Warning" ] ; then
+        echo "OK: $Name {CPU: ${RoundedCpuResult}%}{Memory: ${RoundedMemResult}%}{Count: ${RealProcessCount}}} | ${Name}_cpu=$RoundedCpuResult ${Name}_mem=$RoundedMemResult ${Name}_count=$RealProcessCount"
         exit 0
 fi
 
 exit 3
-
+                  
