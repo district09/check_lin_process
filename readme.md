@@ -4,6 +4,10 @@
 
 Checks Linux process count, CPU and memory usage and produce relevant exit code and performance data to Nagios.
 
+### Screenshots
+
+![Check Linux Process 01](/../screenshots/check-lin-process-example-01.png?raw=true "Check Linux Process 01")
+
 ### Status
 
 Production ready. 
