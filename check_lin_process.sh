@@ -1,5 +1,5 @@
 # Script name:          check_lin_process.sh
-# Version:              v2.01.160105
+# Version:              v2.04.160107
 # Created on:           17/08/2015
 # Author:               Willem D'Haese
 # Purpose:              Bash script that counts processes and returns total
@@ -10,6 +10,7 @@
 #   17/08/15 => Creation date
 #   22/12/15 => Subtract 2 from process count and critical if 0
 #   05/01/16 => Added Minimum and Maximum process count, replaced getopt
+#   07/01/16 => Better process count, added noheader and ps -C
 # Copyright:
 # This program is free software: you can redistribute it and/or modify it
 # under the terms of the GNU General Public License as published by the Free
@@ -83,6 +84,11 @@ while :; do
             Maximum="$1"
             shift
             ;;
+        -C|-Count)
+            shift
+            Count="$1"
+            shift
+            ;;
         -*)
             echo "you specified a non-existant option. Please debug."
             exit 2
@@ -101,7 +107,8 @@ if [[ "$DisplayHelp" == "true" ]] ; then
         -w|--Warning,   Specify a warning level for the check, default is 60%
         -c|--Critical,  Specify a critical level for the check, default is 70%
         -m|--Minimum,   Minimum number of processes expected to run, default 0
-        -M|--Maximum,   Maximum amount of processes expected to run, default 100"
+        -M|--Maximum,   Maximum amount of processes expected to run, default 100
+        -C|--Count,     Method to count processes"
     exit 0
 fi
 
@@ -114,12 +121,13 @@ if [ "$Name" == "" ] ; then
     Name=$Process
 fi
 
-CheckCpu=`ps -C $Process -o%cpu= | paste -sd+ | bc`
-RoundedCpuResult=`echo $CheckCpu | awk '{print int($1+0.5)}'`
-CheckMem=`ps -C $Process -o%mem= | paste -sd+ | bc`
-RoundedMemResult=`echo $CheckMem | awk '{print int($1+0.5)}'`
-ProcessCount=`ps -ef | grep -v grep | grep $Process | wc -l`
-RealProcessCount=$(($ProcessCount-2))
+CheckCpu=$(ps -C $Process -o%cpu= | paste -sd+ | bc)
+RoundedCpuResult=$(echo $CheckCpu | awk '{print int($1+0.5)}')
+CheckMem=$(ps -C $Process -o%mem= | paste -sd+ | bc)
+RoundedMemResult=$(echo $CheckMem | awk '{print int($1+0.5)}')
+RealProcessCount=$(ps -C $Process --no-heading | wc -l)
+#ProcessCount=`ps -ef | grep -v grep | grep $Process | wc -l`
+#RealProcessCount=$(($ProcessCount-2))
 
 if [ "$Warning" == "" ] ; then
     Warning=60
@@ -151,4 +159,3 @@ elif [ "$RoundedCpuResult" -lt "$Warning" -o "$RoundedMemResult" -lt "$Warning" 
 fi
 
 exit 3
-                  
