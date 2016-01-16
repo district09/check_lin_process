@@ -1,5 +1,6 @@
+#!/bin/bash
 # Script name:          check_lin_process.sh
-# Version:              v2.04.160107
+# Version:              v2.05.160116
 # Created on:           17/08/2015
 # Author:               Willem D'Haese
 # Purpose:              Bash script that counts processes and returns total
@@ -11,6 +12,7 @@
 #   22/12/15 => Subtract 2 from process count and critical if 0
 #   05/01/16 => Added Minimum and Maximum process count, replaced getopt
 #   07/01/16 => Better process count, added noheader and ps -C
+#   16/01/16 => Added average CPU option and more detailed output
 # Copyright:
 # This program is free software: you can redistribute it and/or modify it
 # under the terms of the GNU General Public License as published by the Free
@@ -24,7 +26,7 @@
 
 Verbose=0
 
-writelog () {
+WriteLog () {
   if [ -z "$1" ] ; then echo "WriteLog: Log parameter #1 is zero length. Please debug..." ; exit 1
   else
     if [ -z "$2" ] ; then echo "WriteLog: Severity parameter #2 is zero length. Please debug..." ; exit 1
@@ -47,115 +49,124 @@ Critical=""
 Minimum=0
 Maximum=100
 ProcessCount=0
+Exitcode=3
+Output=""
 
 while :; do
     case "$1" in
         -h|--help)
-            DisplayHelp="true"
-            shift
-            ;;
+            DisplayHelp="true" ; shift ; ;;
         -p|--Process)
-            shift
-            Process="$1"
-            shift
-            ;;
+            shift ; Process="$1" ; shift ; ;;
         -N|--Name)
-            shift
-            Name="$1"
-            shift
-            ;;
+            shift ; Name="$1" ; shift ; ;;
         -w|--Warning)
-            shift
-            Warning="$1"
-            shift
-            ;;
+            shift ; Warning="$1" ; shift ; ;;
         -c|--Critical)
-            shift
-            Critical="$1"
-            shift
-            ;;
+            shift ; Critical="$1" ; shift ; ;;
         -m|--Minimum)
-            shift
-            Minimum="$1"
-            shift
-            ;;
+            shift ; Minimum="$1" ; shift ; ;;
         -M|--Maximum)
-            shift
-            Maximum="$1"
-            shift
-            ;;
+            shift ; Maximum="$1" ; shift ; ;;
         -C|-Count)
-            shift
-            Count="$1"
-            shift
-            ;;
+            shift ; Count="$1" ; shift ; ;;
+        -A|--AverageCpu)
+            AverageCpu="true" ; shift ; ;;
         -*)
-            echo "you specified a non-existant option. Please debug."
-            exit 2
-            ;;
+            echo "you specified a non-existant option. Please debug." ; exit 2 ; ;;
         *)
-            break
-            ;;
+            break ; ;;
     esac
 done
 
 if [[ "$DisplayHelp" == "true" ]] ; then
     echo "
-        -h|--help,      Display help information
-        -N|--Name,      Specify a fancy name for the process
-        -p|--Process,   Specify a process to be monitored
-        -w|--Warning,   Specify a warning level for the check, default is 60%
-        -c|--Critical,  Specify a critical level for the check, default is 70%
-        -m|--Minimum,   Minimum number of processes expected to run, default 0
-        -M|--Maximum,   Maximum amount of processes expected to run, default 100
-        -C|--Count,     Method to count processes"
+        -h|--help,         Display help information
+        -N|--Name,         Specify a fancy name for the process
+        -p|--Process,      Specify a process to be monitored
+        -w|--Warning,      Specify a warning level for the check, default is 60%
+        -c|--Critical,     Specify a critical level for the check, default is 70%
+        -m|--Minimum,      Minimum number of processes expected to run, default 0
+        -M|--Maximum,      Maximum amount of processes expected to run, default 100
+        -A|--AverageCpu,   Divide process cpu count by the number of process cores
+        -C|--Count,        Method to define process find (To do)"
     exit 0
 fi
-
-if [ "$Process" == "" ] ; then
+if [[ "$Process" == "" ]] ; then
     echo "No process was specified. The '-p' switch must be used to specify the process"
     exit 3
 fi
 
-if [ "$Name" == "" ] ; then
+if [[ "$Name" == "" ]] ; then
     Name=$Process
 fi
-
+CpuCount=$(cat /proc/cpuinfo | grep processor | wc -l)
+WriteLog Verbose Info "CPU Cores: $CpuCount"
 CheckCpu=$(ps -C $Process -o%cpu= | paste -sd+ | bc)
+WriteLog Verbose Info "CPU Total %: $CheckCpu"
+if [[ "$AverageCpu" == "true" ]] ; then
+	CheckCpu=$(echo "$CheckCpu/$CpuCount" | bc -l)
+	WriteLog Verbose Info "CPU Averaged: $CheckCpu"
+fi
 RoundedCpuResult=$(echo $CheckCpu | awk '{print int($1+0.5)}')
+WriteLog Verbose Info "CPU Rounded: $RoundedCpuResult"
 CheckMem=$(ps -C $Process -o%mem= | paste -sd+ | bc)
 RoundedMemResult=$(echo $CheckMem | awk '{print int($1+0.5)}')
 RealProcessCount=$(ps -C $Process --no-heading | wc -l)
+# ps -ef to retrieve the process count was in fact incorrect
 #ProcessCount=`ps -ef | grep -v grep | grep $Process | wc -l`
 #RealProcessCount=$(($ProcessCount-2))
-
-if [ "$Warning" == "" ] ; then
+if [[ "$Warning" == "" ]] ; then
     Warning=60
 fi
-if [ "$Critical" == "" ] ; then
+if [[ "$Critical" == "" ]] ; then
     Critical=70
 fi
-
+WriteLog Verbose Info "Rounded CPU Result: $RoundedCpuResult , ROunde Memory Result: $RoundedMemResult" 
 if [ "$RoundedCpuResult" == "" -o "$RoundedMemResult" == "" ] ; then
-        echo "The $Name process doesn't appear to be running, as CPU or memory is undefined. Please debug."
-        exit 1
-elif [[ $RealProcessCount -lt $Minimum ]] ; then
-    echo "CRITICAL: $Name process count lesser then Minimum threshold. {CPU: ${RoundedCpuResult}%}{Memory: ${RoundedMemResult}%}{Count: ${RealProcessCount}}} | ${Name}_cpu=$RoundedCpuResult ${Name}_mem=$RoundedMemResult ${Name}_count=$RealProcessCount"
-    exit 2
-elif [[ $RealProcessCount -gt $Maximum ]] ; then
-        echo "CRITICAL: $Name process count greater then Maximum threshold. {CPU: ${RoundedCpuResult}%}{Memory: ${RoundedMemResult}%}{Count: ${RealProcessCount}}} | ${Name}_cpu=$RoundedCpuResult ${Name}_mem=$RoundedMemResult ${Name}_count=$RealProcessCount"
-        exit 2
+        Output="The $Name process doesn't appear to be running, as CPU or memory is undefined. Please debug. "
+	Exitcode=2 ;
+else
+    if [[ $RealProcessCount -lt $Minimum ]] ; then
+        Output="${Output}$Name process count of $RealProcessCount is lesser then Minimum threshold of ${Minimum}. "
+        CountMinExitcode=2
+    fi
+    if [[ $RealProcessCount -gt $Maximum ]] ; then
+        Output="${Output}$Name process count of $RealProcessCount is larger then Maximum threshold of ${Maximum}. "
+        CountMaxExitcode=2
+    fi
+    if [ "$RoundedCpuResult" -ge "$Critical" ] ; then
+        Output="${Output}$Name CPU usage exceeded critical threshold. "
+        Exitcode=2
+    elif [ "$RoundedCpuResult" -ge "$Warning" ] ; then
+        Output="${Output}$Name CPU usage exceeded warning threshold. "
+        Exitcode=1
+    fi
+    if [ "$RoundedMemResult" -ge "$Critical" ] ; then
+        Output="${Output}$Name memory usage exceeded critical threshold. "
+        Exitcode=2
+    elif [ "$RoundedMemResult" -ge "$Warning" ] ; then
+        Output="${Output}$Name memory usage exceeded warning threshold. "
+        Exitcode=1
+    fi
+    if [ "$RoundedCpuResult" -lt "$Warning" -a "$RoundedMemResult" -lt "$Warning" ] ; then
+        WriteLog Verbose Info "OK? RoundedCpuResult: $RoundedCpuResult , RoundedMemResult: $RoundedMemResult Warning: $Warning Critical: $Critical CountExitcode: $CountExitcode"
+        if [ $CountMinExitcode -eq 2 -o $CountExitMaxcode -eq 2 ] ; then
+            Exitcode=2
+        else
+            Output="${Output}$Name "
+            Exitcode=0
+        fi 
+    fi
+    Details="{CPU: ${RoundedCpuResult}%}{Memory: ${RoundedMemResult}%}{Count: ${RealProcessCount}}} | ${Name}_cpu=$RoundedCpuResult ${Name}_mem=$RoundedMemResult ${Name}_count=$RealProcessCount"
 fi
 
-if [ "$RoundedCpuResult" -ge "$Critical" -o  "$RoundedMemResult" -ge "$Critical" ] ; then
-        echo "CRITICAL: $Name exceeded critical threshold. {CPU: ${RoundedCpuResult}%}{Memory: ${RoundedMemResult}%}{Count: ${RealProcessCount}}} | ${Name}_cpu=$RoundedCpuResult ${Name}_mem=$RoundedMemResult ${Name}_count=$RealProcessCount"
-        exit 2
-elif [ "$RoundedCpuResult" -ge "$Warning" -o "$RoundedMemResult" -ge "$Warning" ] ; then
-        echo "WARNING: $Name exceeded warning threshold. {CPU: ${RoundedCpuResult}%}{Memory: ${RoundedMemResult}%}{Count: ${RealProcessCount}}} | ${Name}_cpu=$RoundedCpuResult ${Name}_mem=$RoundedMemResult ${Name}_count=$RealProcessCount"
-        exit 1
-elif [ "$RoundedCpuResult" -lt "$Warning" -o "$RoundedMemResult" -lt "$Warning" ] ; then
-        echo "OK: $Name {CPU: ${RoundedCpuResult}%}{Memory: ${RoundedMemResult}%}{Count: ${RealProcessCount}}} | ${Name}_cpu=$RoundedCpuResult ${Name}_mem=$RoundedMemResult ${Name}_count=$RealProcessCount"
-        exit 0
-fi
-
-exit 3
+case "$Exitcode" in
+    0) Output="OK: ${Output}$Details" ;;
+    1) Output="WARNING: ${Output}$Details" ;;
+    2) Output="CRITICAL: ${Output}$Details" ;;
+    3) Output="UNKNOWN: ${Output}$Details" ;;
+    *) Output="UNKNOWN: Exitcode ${Exitcode}. ${Output}$Details" ;;
+esac
+echo $Output
+exit $Exitcode
