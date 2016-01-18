@@ -1,6 +1,6 @@
 #!/bin/bash
 # Script name:          check_lin_process.sh
-# Version:              v2.05.160116
+# Version:              v2.06.160116
 # Created on:           17/08/2015
 # Author:               Willem D'Haese
 # Purpose:              Bash script that counts processes and returns total
@@ -8,11 +8,11 @@
 # On GitHub:            https://github.com/willemdh/check_lin_process
 # On OutsideIT:         http://outsideit.net/check-lin-process
 # Recent History:
-#   17/08/15 => Creation date
 #   22/12/15 => Subtract 2 from process count and critical if 0
 #   05/01/16 => Added Minimum and Maximum process count, replaced getopt
 #   07/01/16 => Better process count, added noheader and ps -C
 #   16/01/16 => Added average CPU option and more detailed output
+#   18/01/16 => Fixed bug with CountMaxExitcode 
 # Copyright:
 # This program is free software: you can redistribute it and/or modify it
 # under the terms of the GNU General Public License as published by the Free
@@ -51,6 +51,8 @@ Maximum=100
 ProcessCount=0
 Exitcode=3
 Output=""
+CountMinExitcode=0
+CountMaxExitcode=0
 
 while :; do
     case "$1" in
@@ -150,8 +152,8 @@ else
         Exitcode=1
     fi
     if [ "$RoundedCpuResult" -lt "$Warning" -a "$RoundedMemResult" -lt "$Warning" ] ; then
-        WriteLog Verbose Info "OK? RoundedCpuResult: $RoundedCpuResult , RoundedMemResult: $RoundedMemResult Warning: $Warning Critical: $Critical CountExitcode: $CountExitcode"
-        if [ $CountMinExitcode -eq 2 -o $CountExitMaxcode -eq 2 ] ; then
+        WriteLog Verbose Info "OK? RoundedCpuResult: $RoundedCpuResult , RoundedMemResult: $RoundedMemResult Warning: $Warning Critical: $Critical CountExitcode: $CountExitcode CountMinExitcode: $CountMinExitcode CountExitMaxcode: $CountExitMaxcode" 
+        if [ $CountMinExitcode -eq 2 -o $CountMaxExitcode -eq 2 ] ; then
             Exitcode=2
         else
             Output="${Output}$Name "
