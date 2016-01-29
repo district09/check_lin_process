@@ -1,6 +1,6 @@
 #!/bin/bash
 # Script name:          check_lin_process.sh
-# Version:              v2.06.160116
+# Version:              v2.08.160129
 # Created on:           17/08/2015
 # Author:               Willem D'Haese
 # Purpose:              Bash script that counts processes and returns total
@@ -8,11 +8,11 @@
 # On GitHub:            https://github.com/willemdh/check_lin_process
 # On OutsideIT:         http://outsideit.net/check-lin-process
 # Recent History:
-#   22/12/15 => Subtract 2 from process count and critical if 0
 #   05/01/16 => Added Minimum and Maximum process count, replaced getopt
 #   07/01/16 => Better process count, added noheader and ps -C
 #   16/01/16 => Added average CPU option and more detailed output
-#   18/01/16 => Fixed bug with CountMaxExitcode 
+#   18/01/16 => Fixed bug with CountMaxExitcode
+#   29/01/16 => Added if for count method
 # Copyright:
 # This program is free software: you can redistribute it and/or modify it
 # under the terms of the GNU General Public License as published by the Free
@@ -53,6 +53,9 @@ Exitcode=3
 Output=""
 CountMinExitcode=0
 CountMaxExitcode=0
+Warning=80
+Critical=90
+Count="cmd"
 
 while :; do
     case "$1" in
@@ -98,36 +101,32 @@ if [[ "$Process" == "" ]] ; then
     echo "No process was specified. The '-p' switch must be used to specify the process"
     exit 3
 fi
-
 if [[ "$Name" == "" ]] ; then
     Name=$Process
 fi
 CpuCount=$(cat /proc/cpuinfo | grep processor | wc -l)
 WriteLog Verbose Info "CPU Cores: $CpuCount"
-CheckCpu=$(ps -C $Process -o%cpu= | paste -sd+ | bc)
-WriteLog Verbose Info "CPU Total %: $CheckCpu"
-if [[ "$AverageCpu" == "true" ]] ; then
-	CheckCpu=$(echo "$CheckCpu/$CpuCount" | bc -l)
-	WriteLog Verbose Info "CPU Averaged: $CheckCpu"
+if [[ "$Count" == "cmd" ]] ; then
+     CheckCpu=$(ps -C $Process -o%cpu= | paste -sd+ | bc)
+   WriteLog Verbose Info "CPU Total %: $CheckCpu"
+   if [[ "$AverageCpu" == "true" ]] ; then
+        CheckCpu=$(echo "$CheckCpu/$CpuCount" | bc -l)
+        WriteLog Verbose Info "CPU Averaged: $CheckCpu"
+   fi
+   RoundedCpuResult=$(echo $CheckCpu | awk '{print int($1+0.5)}')
+   WriteLog Verbose Info "CPU Rounded: $RoundedCpuResult"
+   CheckMem=$(ps -C $Process -o%mem= | paste -sd+ | bc)
+   RoundedMemResult=$(echo $CheckMem | awk '{print int($1+0.5)}')
+   RealProcessCount=$(ps -C $Process --no-heading | wc -l)
 fi
-RoundedCpuResult=$(echo $CheckCpu | awk '{print int($1+0.5)}')
-WriteLog Verbose Info "CPU Rounded: $RoundedCpuResult"
-CheckMem=$(ps -C $Process -o%mem= | paste -sd+ | bc)
-RoundedMemResult=$(echo $CheckMem | awk '{print int($1+0.5)}')
-RealProcessCount=$(ps -C $Process --no-heading | wc -l)
 # ps -ef to retrieve the process count was in fact incorrect
 #ProcessCount=`ps -ef | grep -v grep | grep $Process | wc -l`
 #RealProcessCount=$(($ProcessCount-2))
-if [[ "$Warning" == "" ]] ; then
-    Warning=60
-fi
-if [[ "$Critical" == "" ]] ; then
-    Critical=70
-fi
-WriteLog Verbose Info "Rounded CPU Result: $RoundedCpuResult , ROunde Memory Result: $RoundedMemResult" 
+
+WriteLog Verbose Info "Rounded CPU Result: $RoundedCpuResult , ROunde Memory Result: $RoundedMemResult"
 if [ "$RoundedCpuResult" == "" -o "$RoundedMemResult" == "" ] ; then
         Output="The $Name process doesn't appear to be running, as CPU or memory is undefined. Please debug. "
-	Exitcode=2 ;
+        Exitcode=2 ;
 else
     if [[ $RealProcessCount -lt $Minimum ]] ; then
         Output="${Output}$Name process count of $RealProcessCount is lesser then Minimum threshold of ${Minimum}. "
@@ -152,13 +151,13 @@ else
         Exitcode=1
     fi
     if [ "$RoundedCpuResult" -lt "$Warning" -a "$RoundedMemResult" -lt "$Warning" ] ; then
-        WriteLog Verbose Info "OK? RoundedCpuResult: $RoundedCpuResult , RoundedMemResult: $RoundedMemResult Warning: $Warning Critical: $Critical CountExitcode: $CountExitcode CountMinExitcode: $CountMinExitcode CountExitMaxcode: $CountExitMaxcode" 
+        WriteLog Verbose Info "OK? RoundedCpuResult: $RoundedCpuResult , RoundedMemResult: $RoundedMemResult Warning: $Warning Critical: $Critical CountExitcode: $CountExitcode CountMinExitcode: $CountMinExitcode CountExitMaxcode: $CountExitMaxcode"
         if [ $CountMinExitcode -eq 2 -o $CountMaxExitcode -eq 2 ] ; then
             Exitcode=2
         else
             Output="${Output}$Name "
             Exitcode=0
-        fi 
+        fi
     fi
     Details="{CPU: ${RoundedCpuResult}%}{Memory: ${RoundedMemResult}%}{Count: ${RealProcessCount}}} | ${Name}_cpu=$RoundedCpuResult ${Name}_mem=$RoundedMemResult ${Name}_count=$RealProcessCount"
 fi
