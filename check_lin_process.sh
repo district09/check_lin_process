@@ -1,6 +1,6 @@
 #!/bin/bash
 # Script name:          check_lin_process.sh
-# Version:              v2.08.160129
+# Version:              v2.09.160315
 # Created on:           17/08/2015
 # Author:               Willem D'Haese
 # Purpose:              Bash script that counts processes and returns total
@@ -8,11 +8,11 @@
 # On GitHub:            https://github.com/willemdh/check_lin_process
 # On OutsideIT:         http://outsideit.net/check-lin-process
 # Recent History:
-#   05/01/16 => Added Minimum and Maximum process count, replaced getopt
 #   07/01/16 => Better process count, added noheader and ps -C
 #   16/01/16 => Added average CPU option and more detailed output
 #   18/01/16 => Fixed bug with CountMaxExitcode
 #   29/01/16 => Added if for count method
+#   15/03/16 => Attempt to make warn / crit / min / max perfdata work
 # Copyright:
 # This program is free software: you can redistribute it and/or modify it
 # under the terms of the GNU General Public License as published by the Free
@@ -44,8 +44,6 @@ WriteLog () {
 
 Process=""
 Name=""
-Warning=""
-Critical=""
 Minimum=0
 Maximum=100
 ProcessCount=0
@@ -110,8 +108,8 @@ if [[ "$Count" == "cmd" ]] ; then
      CheckCpu=$(ps -C $Process -o%cpu= | paste -sd+ | bc)
    WriteLog Verbose Info "CPU Total %: $CheckCpu"
    if [[ "$AverageCpu" == "true" ]] ; then
-        CheckCpu=$(echo "$CheckCpu/$CpuCount" | bc -l)
-        WriteLog Verbose Info "CPU Averaged: $CheckCpu"
+	CheckCpu=$(echo "$CheckCpu/$CpuCount" | bc -l)
+	WriteLog Verbose Info "CPU Averaged: $CheckCpu"
    fi
    RoundedCpuResult=$(echo $CheckCpu | awk '{print int($1+0.5)}')
    WriteLog Verbose Info "CPU Rounded: $RoundedCpuResult"
@@ -123,10 +121,10 @@ fi
 #ProcessCount=`ps -ef | grep -v grep | grep $Process | wc -l`
 #RealProcessCount=$(($ProcessCount-2))
 
-WriteLog Verbose Info "Rounded CPU Result: $RoundedCpuResult , ROunde Memory Result: $RoundedMemResult"
+WriteLog Verbose Info "Rounded CPU Result: $RoundedCpuResult , ROunde Memory Result: $RoundedMemResult" 
 if [ "$RoundedCpuResult" == "" -o "$RoundedMemResult" == "" ] ; then
         Output="The $Name process doesn't appear to be running, as CPU or memory is undefined. Please debug. "
-        Exitcode=2 ;
+	Exitcode=2 ;
 else
     if [[ $RealProcessCount -lt $Minimum ]] ; then
         Output="${Output}$Name process count of $RealProcessCount is lesser then Minimum threshold of ${Minimum}. "
@@ -151,15 +149,15 @@ else
         Exitcode=1
     fi
     if [ "$RoundedCpuResult" -lt "$Warning" -a "$RoundedMemResult" -lt "$Warning" ] ; then
-        WriteLog Verbose Info "OK? RoundedCpuResult: $RoundedCpuResult , RoundedMemResult: $RoundedMemResult Warning: $Warning Critical: $Critical CountExitcode: $CountExitcode CountMinExitcode: $CountMinExitcode CountExitMaxcode: $CountExitMaxcode"
+        WriteLog Verbose Info "OK? RoundedCpuResult: $RoundedCpuResult , RoundedMemResult: $RoundedMemResult Warning: $Warning Critical: $Critical CountExitcode: $CountExitcode CountMinExitcode: $CountMinExitcode CountExitMaxcode: $CountExitMaxcode" 
         if [ $CountMinExitcode -eq 2 -o $CountMaxExitcode -eq 2 ] ; then
             Exitcode=2
         else
             Output="${Output}$Name "
             Exitcode=0
-        fi
+        fi 
     fi
-    Details="{CPU: ${RoundedCpuResult}%}{Memory: ${RoundedMemResult}%}{Count: ${RealProcessCount}}} | ${Name}_cpu=$RoundedCpuResult ${Name}_mem=$RoundedMemResult ${Name}_count=$RealProcessCount"
+    Details="{CPU: ${RoundedCpuResult}%}{Memory: ${RoundedMemResult}%}{Count: ${RealProcessCount}} | '${Name}_cpu'=${RoundedCpuResult}%;$Warning;$Critical;0;100 '${Name}_mem'=${RoundedMemResult}%;$Warning;$Critical;0;100 '${Name}_count'=$RealProcessCount;$Maximum;$Maximum;0;99999"
 fi
 
 case "$Exitcode" in
