@@ -5,24 +5,13 @@
 # Author:               Willem D'Haese
 # Purpose:              Bash script that counts processes and returns total
 #                       memory and cpu perfdata.
-# On GitHub:            https://github.com/willemdh/check_lin_process
-# On OutsideIT:         http://outsideit.net/check-lin-process
-# Recent History:
-#   07/01/16 => Better process count, added noheader and ps -C
-#   16/01/16 => Added average CPU option and more detailed output
-#   18/01/16 => Fixed bug with CountMaxExitcode
-#   29/01/16 => Added if for count method
-#   15/03/16 => Attempt to make warn / crit / min / max perfdata work
+# On GitHub:            https://github.com/OutsideIT/check_lin_process
 # Copyright:
-# This program is free software: you can redistribute it and/or modify it
-# under the terms of the GNU General Public License as published by the Free
-# Software Foundation, either version 3 of the License, or (at your option)
-# any later version. This program is distributed in the hope that it will be
-# useful, but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General
-# Public License for more details. You should have received a copy of the
-# GNU General Public License along with this program.  If not, see
-# <http://www.gnu.org/licenses/>.
+#   This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published
+#   by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. This program is distributed 
+#   in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A 
+#   PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU General Public 
+#   License along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 Verbose=0
 
